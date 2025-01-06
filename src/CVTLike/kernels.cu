@@ -4,7 +4,7 @@
 __global__ void compute_triangle_stuff4(double weight, double w_1, double w_2, double w_3, int* triangleID_to_vertex_indices, double* vertexIndice_to_vertex, double* area_vec, double* normals, double* rs, double* sites, int* triangleID_to_sites, double epsilon, double lambda, int START_TRIANGLE, int END_TRIANGLE)
 {
     int threadId = (blockDim.x * blockIdx.x) + threadIdx.x; // 5*Numtriangles many
-    // int vertexi0, pt0_x, pt1_x, ..., site_id, x_pt, x_norm, v_p_x; declare but not initialize
+
     int NUM_TRIANGLES = END_TRIANGLE - START_TRIANGLE;
     if (threadId >= 5 * NUM_TRIANGLES) return;
 
