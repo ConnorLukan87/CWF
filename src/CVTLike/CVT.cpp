@@ -311,266 +311,319 @@ namespace BGAL
 
 	}
 
+void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
+{
 
-	void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
-	{
+	const std::string DATA_PATH = "C:/Users/Student/CWF/data/";
+	double allTime = 0, RVDtime = 0;
+	clock_t start, end;
+	clock_t startRVD, endRVD;
 
-		double allTime = 0, RVDtime = 0;
-		clock_t start, end;
-		clock_t startRVD, endRVD;
+	std::string filepath = "../../data/";
+	double PI = 3.14159265358;
+	std::string modelname = modelNamee;
+	Polyhedron polyhedron;
+	std::ifstream input(DATA_PATH + "Temp.off");
+	input >> polyhedron;
+	Tree tree(faces(polyhedron).first, faces(polyhedron).second, polyhedron);
 
-		std::string filepath = "../../data/";
-		double PI = 3.14159265358;
-		std::string modelname = modelNamee;
-		Polyhedron polyhedron;
-		std::ifstream input("Temp.off");
-		input >> polyhedron;
-		Tree tree(faces(polyhedron).first, faces(polyhedron).second, polyhedron);
+	int NUM_VERTICES = polyhedron.size_of_vertices();
 
+	double Movement = 0.01;
+	std::string inPointsName;
+	if (pointsName == nullptr) {
+		inPointsName = DATA_PATH + "n" + std::to_string(num_sites) + "_" + modelname + "_inputPoints.xyz";
+	}
+	else {
+		inPointsName = pointsName;
+	}
+	std::ifstream inPoints(inPointsName.c_str());
 
+	std::vector<Eigen::Vector3d> Pts, Nors;
 
-		//if anisotropic
-		/*
-		Eigen::MatrixXd V;
-		Eigen::MatrixXi F;
-		igl::readOFF("Temp.off", V, F);
-		Eigen::VectorXd K;
+	int count = 0;
+	double x, y, z, nx, ny, nz; // if xyz file has normal
+	while (inPoints >> x >> y >> z >> nx >> ny >> nz) {
+		Pts.push_back(Eigen::Vector3d(x, y, z));
+		Nors.push_back(
+			Eigen::Vector3d(nx, ny, nz)); // Nors here is useless, if do not have normal, just set it to (1,0,0)
+		++count;
+	}
+	inPoints.close();
+	std::cout << "Pts.size(): " << Pts.size() << std::endl;
 
-		Eigen::MatrixXd HN;
-		Eigen::SparseMatrix<double> L, M, Minv;
-		igl::cotmatrix(V, F, L);
-		igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
-		igl::invert_diag(M, Minv);
-		// Laplace-Beltrami of position
-		HN = -Minv * (L * V);
-		// Extract magnitude as mean curvature
-		Eigen::VectorXd H = HN.rowwise().norm();
+	if (pointsName != nullptr) {
+		num_sites = count;
+	}
+	// begin step 1.
+	int num = Pts.size();
 
-		// Compute curvature directions via quadric fitting
-		Eigen::MatrixXd PD1, PD2;
-		Eigen::VectorXd PV1, PV2;
-		igl::principal_curvature(V, F, PD1, PD2, PV1, PV2);
-		// mean curvature
-		H = 0.5 * (PV1 + PV2);
-		map<MyPoint, int> Point2ID;
-		for (int i = 0; i < V.rows(); ++i)
+	std::vector<Eigen::Vector3d> Pts3;
+	std::cout << "\nBegin CWF.\n" << std::endl;
+
+	int MAX_THREADS_AVAILABLE = omp_get_max_threads();
+	int Fnum = 4;
+	double alpha = 1.0, eplison = 1, lambda = 1; // eplison is CVT weight,  lambda is qe weight.
+	double decay = 0.95;
+	
+	int grid_size, block_size;
+	get_launch_params(&grid_size, &block_size);
+
+	int MAX_THREADS_PER_BATCH = (grid_size * block_size) / 5;
+	MAX_THREADS_PER_BATCH *= 5; // make it a multiple of 5
+	int THREADS_PER_TRIANGLE = 5;
+
+	int* triangleID_to_vertexIDs_host, * triangleID_to_site_host;
+	double* vertexIndice_to_vertex_host, * sites_host, * normals_vec_host, * area_vec_host;
+	double* vertexIndice_to_vertex_device, * sites_device, * r_vec_host;
+	int* triangleID_to_vertexIDs_device, * triangleID_to_site_device;
+	double* normals_vec_device, * area_vec_device, * r_vec_device, * gi_vec;
+	std::function<double(const Eigen::VectorXd& X, Eigen::VectorXd& g)> fgm2
+		= [&](const Eigen::VectorXd& X, Eigen::VectorXd& g)
 		{
-			MyPoint p(V(i, 0), V(i, 1), V(i, 2));
-			Point2ID[p] = i;
-			PD1.row(i) = PD1.row(i).normalized();
-			PD2.row(i) = PD2.row(i).normalized();
-			double ep = 1;
-			PV1(i) += ep;
-			PV2(i) += ep;
-			double bata = (PV1(i)* PV1(i))*(PV2(i)* PV2(i));
-			PV1(i) = sqrt((PV1(i) * PV1(i) ) / bata);
-			PV2(i) = sqrt((PV2(i) * PV2(i) ) / bata);
-		}
-		*/
+			eplison = eplison * decay;
+			double lossCVT = 0, lossQE = 0, totalLoss = 0;
 
-
-		double Movement = 0.01;
-		std::string inPointsName;
-		if(pointsName == nullptr){
-			inPointsName = std::string("..\\..\\data\\n") + std::to_string(num_sites)+"_" + modelname + "_inputPoints.xyz";
-		}else{
-			inPointsName = pointsName;
-		}
-		std::ifstream inPoints(inPointsName.c_str());
-
-		std::vector<Eigen::Vector3d> Pts,Nors;
-
-		int count = 0;
-		double x, y, z, nx, ny, nz; // if xyz file has normal
-		while (inPoints >>x >> y >> z >>nx>>ny>>nz)
-		{
-			Pts.push_back(Eigen::Vector3d(x, y, z));
-			Nors.push_back(Eigen::Vector3d(nx,ny,nz)); // Nors here is useless, if do not have normal, just set it to (1,0,0)
-			++count;
-		}
-		inPoints.close();
-		std::cout<<"Pts.size(): "<<Pts.size()<< std::endl;
-
-         if(pointsName != nullptr){
-			num_sites = count;
-		 }
-		// begin step 1.
-		int num = Pts.size();
-
-		std::vector<Eigen::Vector3d> Pts3;
-		std::cout<< "\nBegin CWF.\n" << std::endl;
-
-
-		int Fnum = 4;
-		double alpha = 1.0, eplison = 1, lambda = 1; // eplison is CVT weight,  lambda is qe weight.
-		double decay = 0.95;
-
-		std::function<double(const Eigen::VectorXd& X, Eigen::VectorXd& g)> fgm2
-			= [&](const Eigen::VectorXd& X, Eigen::VectorXd& g)
+			startRVD = clock();
+			for (int i = 0; i < num; ++i)
 			{
-				eplison = eplison * decay;
-				double lossCVT = 0, lossQE = 0, loss = 0;
+				Point_T query(X(i * 3), X(i * 3 + 1), X(i * 3 + 2)); //project to base surface
+				Point_T closest = tree.closest_point(query);
+				auto tri = tree.closest_point_and_primitive(query);
 
-				startRVD = clock();
-				for (int i = 0; i < num; ++i)
+				Polyhedron::Face_handle f = tri.second;
+				auto p1 = f->halfedge()->vertex()->point();
+				auto p2 = f->halfedge()->next()->vertex()->point();
+				auto p3 = f->halfedge()->next()->next()->vertex()->point();
+				Eigen::Vector3d v1(p1.x(), p1.y(), p1.z());
+				Eigen::Vector3d v2(p2.x(), p2.y(), p2.z());
+				Eigen::Vector3d v3(p3.x(), p3.y(), p3.z());
+				Eigen::Vector3d N = (v2 - v1).cross(v3 - v1);
+				N.normalize();
+				Nors[i] = N;
+				BGAL::_Point3 p(closest.x(), closest.y(), closest.z());
+				_sites[i] = p;
+			}
+			_RVD.calculate_(_sites);
+			Fnum++;
+
+			if (Fnum % 1 == 0)
+			{
+				OutputMesh(_sites, _RVD, num_sites, outpath, modelname, Fnum); //output process
+			}
+			endRVD = clock();
+			RVDtime += (double)(endRVD - startRVD) / CLOCKS_PER_SEC;
+
+			const std::vector<std::vector<std::tuple<int, int, int>>>& cells = _RVD.get_cells_();
+			const std::vector<std::map<int, std::vector<std::pair<int, int>>>>& edges = _RVD.get_edges_();
+			double energy = 0.0;
+			g.setZero();
+			std::vector<Eigen::Vector3d> gi;
+			gi.resize(num);
+			int NUM_TRIANGLES = 0;
+			for (int i = 0; i < num; ++i)
+			{
+				gi[i] = Eigen::Vector3d(0, 0, 0);
+				NUM_TRIANGLES += cells[i].size();
+			}
+			NUM_VERTICES = _RVD.number_vertices_();
+
+
+			area_vec_host = new double[NUM_TRIANGLES];
+			normals_vec_host = new double[3 * NUM_TRIANGLES];
+			sites_host = new double[num * 3];
+			triangleID_to_site_host = new int[NUM_TRIANGLES];
+			triangleID_to_vertexIDs_host = new int[3 * NUM_TRIANGLES];
+			vertexIndice_to_vertex_host = new double[NUM_VERTICES * 3];
+
+			int triangles_before_here = 0, id0, id1, id2;
+			double area;
+			std::vector<bool> ids_used(NUM_VERTICES, false);
+			for (int i = 0; i < num; i++)
+			{
+				int NUM_TRIANGLES_HERE = cells[i].size();
+				for (int j = 0; j < NUM_TRIANGLES_HERE; j++)
 				{
-					Point_T query(X(i * 3), X(i * 3 + 1), X(i * 3 + 2)); //project to base surface
-					Point_T closest = tree.closest_point(query);
-					auto tri = tree.closest_point_and_primitive(query);
+					id0 = std::get<0>(cells[i][j]);
+					id1 = std::get<1>(cells[i][j]);
+					id2 = std::get<2>(cells[i][j]);
+					// put this vertex into the vertexIndice_to_vertex_host
+					BGAL::_Point3 p0 = _RVD.vertex_(id0);
+					vertexIndice_to_vertex_host[(3 * id0) + 0] = p0.x();
+					vertexIndice_to_vertex_host[(3 * id0) + 1] = p0.y();
+					vertexIndice_to_vertex_host[(3 * id0) + 2] = p0.z();
+					BGAL::_Point3 p1 = _RVD.vertex_(id1);
+					vertexIndice_to_vertex_host[(3 * id1) + 0] = p1.x();
+					vertexIndice_to_vertex_host[(3 * id1) + 1] = p1.y();
+					vertexIndice_to_vertex_host[(3 * id1) + 2] = p1.z();
+					BGAL::_Point3 p2 = _RVD.vertex_(id2);
+					vertexIndice_to_vertex_host[(3 * id2) + 0] = p2.x();
+					vertexIndice_to_vertex_host[(3 * id2) + 1] = p2.y();
+					vertexIndice_to_vertex_host[(3 * id2) + 2] = p2.z();
+					// get the mapping from threadId to triangle vertices
+					triangleID_to_vertexIDs_host[(3 * (triangles_before_here + j)) + 0] = id0;
+					triangleID_to_vertexIDs_host[(3 * (triangles_before_here + j)) + 1] = id1;
+					triangleID_to_vertexIDs_host[(3 * (triangles_before_here + j)) + 2] = id2;
 
-					Polyhedron::Face_handle f = tri.second;
-					auto p1 = f->halfedge()->vertex()->point();
-					auto p2 = f->halfedge()->next()->vertex()->point();
-					auto p3 = f->halfedge()->next()->next()->vertex()->point();
-					Eigen::Vector3d v1(p1.x(), p1.y(), p1.z());
-					Eigen::Vector3d v2(p2.x(), p2.y(), p2.z());
-					Eigen::Vector3d v3(p3.x(), p3.y(), p3.z());
-					Eigen::Vector3d N = (v2 - v1).cross(v3 - v1);
-					N.normalize();
-					Nors[i] = N;
-					BGAL::_Point3 p(closest.x(), closest.y(), closest.z());
-					_sites[i] = p;
+					triangleID_to_site_host[triangles_before_here + j] = i;
+					// get vertex(id1) - vertex(id0)
+					// get verrtex(id2) - vertex(id0)
+
+					// compute the cross product
+					BGAL::_Point3 cross_prod = (p1 - p0).cross_(p2 - p0);
+					// compute area for this triangle
+					area = cross_prod.length_();
+					area_vec_host[triangles_before_here + j] = .5 * area;
+					// compute normal for this triangle
+					cross_prod.normalized_();
+					normals_vec_host[3 * (j + triangles_before_here)] = cross_prod.x();
+					normals_vec_host[(3 * (j + triangles_before_here)) + 1] = cross_prod.y();
+					normals_vec_host[(3 * (j + triangles_before_here)) + 2] = cross_prod.z();
+
 				}
-				_RVD.calculate_(_sites);
-				Fnum++;
-				if (Fnum % 1 == 0)
+				triangles_before_here += NUM_TRIANGLES_HERE;
+				sites_host[3 * i] = _sites[i].x();
+				sites_host[(3 * i) + 1] = _sites[i].y();
+				sites_host[(3 * i) + 2] = _sites[i].z();
+			}
+
+			cudaMalloc((void**)&vertexIndice_to_vertex_device, sizeof(double) * 3 * NUM_VERTICES);
+			cudaMalloc((void**)&sites_device, sizeof(double) * 3 * num);
+			cudaMalloc((void**)&triangleID_to_vertexIDs_device, sizeof(int) * 3 * NUM_TRIANGLES);
+			cudaMalloc((void**)&normals_vec_device, sizeof(double) * 3 * NUM_TRIANGLES);
+			cudaMalloc((void**)&area_vec_device, sizeof(double) * NUM_TRIANGLES);
+			cudaMalloc((void**)&triangleID_to_site_device, sizeof(int) * NUM_TRIANGLES);
+
+			cudaMemcpy(triangleID_to_vertexIDs_device, triangleID_to_vertexIDs_host, sizeof(int) * 3 * NUM_TRIANGLES, cudaMemcpyHostToDevice);
+			cudaMemcpy(vertexIndice_to_vertex_device, vertexIndice_to_vertex_host, sizeof(double) * 3 * NUM_VERTICES, cudaMemcpyHostToDevice);
+			cudaMemcpy(normals_vec_device, normals_vec_host, sizeof(double) * 3 * NUM_TRIANGLES, cudaMemcpyHostToDevice);
+			cudaMemcpy(sites_device, sites_host, sizeof(double) * 3 * num, cudaMemcpyHostToDevice);
+			cudaMemcpy(area_vec_device, area_vec_host, sizeof(double) * NUM_TRIANGLES, cudaMemcpyHostToDevice);
+			cudaMemcpy(triangleID_to_site_device, triangleID_to_site_host, sizeof(int) * NUM_TRIANGLES, cudaMemcpyHostToDevice);
+
+			int current_triangle = 0;
+			int current_site;
+			cudaMalloc((void**)&r_vec_device, sizeof(double) * MAX_THREADS_PER_BATCH);
+			r_vec_host = new double[MAX_THREADS_PER_BATCH];
+			gi_vec = new double[5 * num];
+			for (int i = 0; i < 5 * num; i++)
+			{
+				gi_vec[i] = 0.0f;
+			}
+
+
+			for (int j = 0; j < ((THREADS_PER_TRIANGLE * NUM_TRIANGLES) + (MAX_THREADS_PER_BATCH - 1)) / MAX_THREADS_PER_BATCH; j++)
+			{
+				// get the current start triangle id and current end triangle id
+				int start = (MAX_THREADS_PER_BATCH * j) / THREADS_PER_TRIANGLE;
+				int end = std::min((j + 1) * MAX_THREADS_PER_BATCH / THREADS_PER_TRIANGLE, NUM_TRIANGLES); // min(max_end_triangle, total number of triangles)
+
+				double r_vec[5] = { 0.0 };
+				cudaMemset(r_vec_device, 0.0, sizeof(double) * MAX_THREADS_PER_BATCH);
+				compute_triangle_wise4(triangleID_to_vertexIDs_device, vertexIndice_to_vertex_device, area_vec_device, normals_vec_device, r_vec_device, sites_device, triangleID_to_site_device, eplison, lambda, start, end, grid_size, block_size);
+				cudaMemcpy(r_vec_host, r_vec_device, sizeof(double) * MAX_THREADS_PER_BATCH, cudaMemcpyDeviceToHost);
+
+				for (int triangle_x = start; triangle_x < end; triangle_x++)
 				{
-					OutputMesh(_sites, _RVD, num_sites, outpath, modelname, Fnum); //output process
-				}
-				endRVD = clock();
-				RVDtime += (double)(endRVD - startRVD) / CLOCKS_PER_SEC;
-
-
-				const std::vector<std::vector<std::tuple<int, int, int>>>& cells = _RVD.get_cells_();
-				const std::vector<std::map<int, std::vector<std::pair<int, int>>>>& edges = _RVD.get_edges_();
-				double energy = 0.0;
-				g.setZero();
-				std::vector<Eigen::Vector3d> gi;
-				gi.resize(num);
-				for (int i = 0; i < num; ++i)
-				{
-					gi[i] = Eigen::Vector3d(0, 0, 0);
-				}
-
-				omp_set_num_threads(30);  // change to your CPU core numbers
-#pragma omp parallel for
-				for (int i = 0; i < num; ++i)
-				{
-
-					for (int j = 0; j < cells[i].size(); ++j)
+					current_site = triangleID_to_site_host[triangle_x];
+					for (int z = 0; z < 5; z++)
 					{
-
-
-						Eigen::VectorXd inte = BGAL::_Integral::integral_triangle3D(
-							[&](BGAL::_Point3 p)
-							{
-								Eigen::VectorXd r(5);
-
-								BGAL::_Point3  NorTriM = (_RVD.vertex_(std::get<1>(cells[i][j])) - _RVD.vertex_(std::get<0>(cells[i][j]))).cross_(_RVD.vertex_(std::get<2>(cells[i][j])) - _RVD.vertex_(std::get<0>(cells[i][j])));
-								NorTriM.normalized_();
-
-
-								BGAL::_Point3 Nori(Nors[i].x(), Nors[i].y(), Nors[i].z());
-
-								r(0) = (eplison * _rho(p) * ((_sites[i] - p).sqlength_())); //CVT
-
-								r(1) = lambda*(NorTriM.dot_(p - _sites[i]))* (NorTriM.dot_(p - _sites[i])) + eplison* ((p - _sites[i]).sqlength_()); // qe+CVT
-
-								r(2) = lambda* -2 * NorTriM.x() * (NorTriM.dot_(p - _sites[i])) + eplison * -2 * (p - _sites[i]).x();  	 //g
-								r(3) = lambda* -2 * NorTriM.y() * (NorTriM.dot_(p - _sites[i])) + eplison * -2 * (p - _sites[i]).y();	 //g
-								r(4) = lambda* -2 * NorTriM.z() * (NorTriM.dot_(p - _sites[i])) + eplison * -2 * (p - _sites[i]).z();	 //g
-
-
-								return r;
-
-							}, _RVD.vertex_(std::get<0>(cells[i][j])), _RVD.vertex_(std::get<1>(cells[i][j])), _RVD.vertex_(std::get<2>(cells[i][j]))
-								);
-						//energy += alpha * inte(1);
-						lossCVT += alpha * inte(0);
-						loss += alpha * inte(1);
-						gi[i].x()+= alpha * inte(2);
-						gi[i].y()+= alpha * inte(3);
-						gi[i].z()+= alpha * inte(4);
+						gi_vec[(5 * current_site) + z] += alpha * r_vec_host[(z * (end - start)) + triangle_x - start];
 					}
 
-
-					// if use exact gradient, then use this
-
-					//for (auto e : edges[i])
-					//{
-					//
-					//	auto p = (0.5 * (_sites[e.first] + _sites[i]));
-					//	auto nx = BGAL::_Point3((0.5 * (Nors[e.first] + Nors[i])).x(), (0.5 * (Nors[e.first] + Nors[i])).y(), (0.5 * (Nors[e.first] + Nors[i])).z());
-					//	auto addgi = (0.5 * (_sites[e.first] - _sites[i]) / (_sites[e.first] - _sites[i]).length_()) *(  pow((p - _sites[i]).dot_(nx),2) - pow((p - _sites[e.first]).dot_(nx), 2)) * (_sites[e.first] - _sites[i]).length_();
-					//	//cout << addgi.length_() << endl;
-					//	gi[i] += lambda*Eigen::Vector3d(addgi.x(), addgi.y(), addgi.z());
-					//}
-					//cout << gi[i].norm() << endl;
-
 				}
 
-				for (int i = 0; i < num; i++)
+			}
+			
+			
+			omp_set_num_threads(MAX_THREADS_AVAILABLE);
+#pragma omp parallel for reduction(+:lossCVT) reduction(+:totalLoss)
+			for (int i = 0; i < num; i++)
+			{
+				double dot0 = 0.0;
+				double dot1 = Nors[i].dot(Nors[i]);
+
+				for (int k = 0; k < 3; k++)
 				{
-					gi[i] = gi[i] - Nors[i] * (gi[i].dot(Nors[i]) / Nors[i].dot(Nors[i]));
-					g(i * 3) += gi[i].x();
-					g(i * 3 + 1) += gi[i].y();
-					g(i * 3 + 2) += gi[i].z();
+					dot0 += gi_vec[(5 * i) + 2 + k] * Nors[i](k);
 				}
-				energy += loss;
 
-				std::cout << std::setprecision(7) << "energy: " << energy << " LossCVT: " << lossCVT/eplison << " LossQE: " << loss - lossCVT << " Lambda_CVT: " << eplison << std::endl;
+				for (int k = 0; k < 3; k++)
+				{
+					gi_vec[(5 * i) + 2 + k] = gi_vec[(5 * i) + 2 + k] - (Nors[i](k) * dot0 / dot1);
+					g((3 * i) + k) += gi_vec[(5 * i) + 2 + k];
+				}
+				lossCVT += gi_vec[5 * i];
+				totalLoss += gi_vec[(5 * i) + 1];
+			}
 
-				return energy;
-			};
+			energy += totalLoss;
 
+			std::cout << std::setprecision(7) << "energy: " << energy << " LossCVT: " << lossCVT / eplison << " LossQE: " << totalLoss - lossCVT << " Lambda_CVT: " << eplison << std::endl;
 
-			std::vector<Eigen::Vector3d> Pts2;
+			delete[] sites_host;
+			delete[] triangleID_to_site_host;
+			delete[] area_vec_host;
+			delete[] normals_vec_host;
+			delete[] triangleID_to_vertexIDs_host;
+			delete[] vertexIndice_to_vertex_host;
+			delete[] gi_vec;
+			delete[] r_vec_host;
+			cudaFree(r_vec_device);
+			cudaFree(triangleID_to_vertexIDs_device);
+			cudaFree(normals_vec_device);
+			cudaFree(area_vec_device);
+			cudaFree(triangleID_to_site_device);
+			cudaFree(sites_device);
+			cudaFree(vertexIndice_to_vertex_device);
+			return energy;
+		};
 
-		Pts2 = Pts;
-		num = Pts2.size();
-		std::cout << Pts2.size()<<"  "<<num << std::endl;
-		_sites.resize(num);
-		_para.max_linearsearch = 20;
-		BGAL::_LBFGS lbfgs2(_para);
-		Eigen::VectorXd iterX2(num * 3);
-		for (int i = 0; i < num; ++i)
-		{
-			iterX2(i * 3) =     Pts2[i].x();
-			iterX2(i * 3 + 1) = Pts2[i].y();
-			iterX2(i * 3 + 2) = Pts2[i].z();
-			_sites[i] = BGAL::_Point3(Pts2[i](0), Pts2[i](1), Pts2[i](2));
-		}
-		_RVD.calculate_(_sites);
-		start = clock();
-		lbfgs2.minimize(fgm2, iterX2);
-		end = clock();
-		allTime += (double)(end - start) / CLOCKS_PER_SEC;
-		std::cout<<"allTime: "<<allTime<<" RVDtime: "<<RVDtime<< " L-BFGS time: "<< allTime - RVDtime << std::endl;
-		for (int i = 0; i < num; ++i)
-		{
-			//Point_T query(x0[i * 3], x0[i * 3+1], x0[i * 3+2]);
-			Point_T query(iterX2(i * 3), iterX2(i * 3+1), iterX2(i * 3+2));
-			Point_T closest = tree.closest_point(query);
-			auto tri = tree.closest_point_and_primitive(query);
+	std::vector<Eigen::Vector3d> Pts2;
 
-			Polyhedron::Face_handle f = tri.second;
-			auto p1 = f->halfedge()->vertex()->point();
-			auto p2 = f->halfedge()->next()->vertex()->point();
-			auto p3 = f->halfedge()->next()->next()->vertex()->point();
-			Eigen::Vector3d v1(p1.x(), p1.y(), p1.z());
-			Eigen::Vector3d v2(p2.x(), p2.y(), p2.z());
-			Eigen::Vector3d v3(p3.x(), p3.y(), p3.z());
-			Eigen::Vector3d N = (v2 - v1).cross(v3 - v1);
-			N.normalize();
-			Nors[i] = N;
+	Pts2 = Pts;
+	num = Pts2.size();
+	std::cout << Pts2.size() << "  " << num << std::endl;
+	_sites.resize(num);
+	_para.max_linearsearch = 20;
+	BGAL::_LBFGS lbfgs2(_para);
+	Eigen::VectorXd iterX2(num * 3);
+	for (int i = 0; i < num; ++i)
+	{
+		iterX2(i * 3) = Pts2[i].x();
+		iterX2(i * 3 + 1) = Pts2[i].y();
+		iterX2(i * 3 + 2) = Pts2[i].z();
+		_sites[i] = BGAL::_Point3(Pts2[i](0), Pts2[i](1), Pts2[i](2));
+	}
+	_RVD.calculate_(_sites);
+	start = clock();
+	lbfgs2.minimize(fgm2, iterX2);
+	end = clock();
+	allTime += (double)(end - start) / CLOCKS_PER_SEC;
+	std::cout << "allTime: " << allTime << " RVDtime: " << RVDtime << " L-BFGS time: " << allTime - RVDtime << std::endl;
+	for (int i = 0; i < num; ++i)
+	{
+		Point_T query(iterX2(i * 3), iterX2(i * 3 + 1), iterX2(i * 3 + 2));
+		Point_T closest = tree.closest_point(query);
+		auto tri = tree.closest_point_and_primitive(query);
 
-			_sites[i] = BGAL::_Point3(closest.x(), closest.y(), closest.z());
+		Polyhedron::Face_handle f = tri.second;
+		auto p1 = f->halfedge()->vertex()->point();
+		auto p2 = f->halfedge()->next()->vertex()->point();
+		auto p3 = f->halfedge()->next()->next()->vertex()->point();
+		Eigen::Vector3d v1(p1.x(), p1.y(), p1.z());
+		Eigen::Vector3d v2(p2.x(), p2.y(), p2.z());
+		Eigen::Vector3d v3(p3.x(), p3.y(), p3.z());
+		Eigen::Vector3d N = (v2 - v1).cross(v3 - v1);
+		N.normalize();
+		Nors[i] = N;
 
-		}
-		_RVD.calculate_(_sites);
-
-		OutputMesh(_sites, _RVD, num_sites, outpath, modelname, 2);
-
+		_sites[i] = BGAL::_Point3(closest.x(), closest.y(), closest.z());
 
 	}
+	_RVD.calculate_(_sites);
+
+	OutputMesh(_sites, _RVD, num_sites, outpath, modelname, 2);
+
+}
 } // namespace BGAL
