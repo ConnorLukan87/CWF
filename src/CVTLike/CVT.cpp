@@ -1,9 +1,10 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <time.h>
-
+#include <cuda_runtime.h>
 
 #include "BGAL/CVTLike/CVT.h"
+#include "BGAL/CVTLike/kernels.h"
 #include "BGAL/Algorithm/BOC/BOC.h"
 #include "BGAL/Integral/Integral.h"
 #include "BGAL/Optimization/LinearSystem/LinearSystem.h"
