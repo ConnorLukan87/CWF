@@ -47,7 +47,7 @@ Open up the project in Visual Studio Code, open the Developer Command Prompt.
 ## License
 CWF is under [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.en.html), so any downstream solution and products (including cloud services) that include CWF code inside it should be open-sourced to comply with the AGPL conditions. For learning purposes only and not for commercial use. If you want to use it for commercial purposes, please contact us first.
 
-'''
+```
 @article{xu2024cwf,
       title={CWF: Consolidating Weak Features in High-quality Mesh Simplification}, 
       author={Xu, Rui and Liu, Longdu and Wang, Ningna and Chen, Shuangmin and Xin, Shiqing and Guo, Xiaohu and Zhong, Zichun and Komura, Taku and Wang, Wenping and Tu, Changhe},
