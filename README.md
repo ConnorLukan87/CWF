@@ -55,10 +55,6 @@ Open up the project in Visual Studio Code, open the Developer Command Prompt.
 - mkdir build
 - cd build
 - msbuild INSTALL.vcxproj
-- cd MAIN
-- msbuild MAIN.vcxproj
-- cd Debug
-- MAIN.exe
 
 ## Test
 
