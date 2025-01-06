@@ -314,8 +314,6 @@ namespace BGAL
 
 void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 {
-
-	const std::string DATA_PATH = "C:/Users/Student/CWF/data/";
 	double allTime = 0, RVDtime = 0;
 	clock_t start, end;
 	clock_t startRVD, endRVD;
@@ -324,7 +322,7 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 	double PI = 3.14159265358;
 	std::string modelname = modelNamee;
 	Polyhedron polyhedron;
-	std::ifstream input(DATA_PATH + "Temp.off");
+	std::ifstream input("Temp.off");
 	input >> polyhedron;
 	Tree tree(faces(polyhedron).first, faces(polyhedron).second, polyhedron);
 
@@ -333,7 +331,7 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 	double Movement = 0.01;
 	std::string inPointsName;
 	if (pointsName == nullptr) {
-		inPointsName = DATA_PATH + "n" + std::to_string(num_sites) + "_" + modelname + "_inputPoints.xyz";
+		inPointsName = std::string("..\\..\\data\\n") + std::to_string(num_sites) + "_" + modelname + "_inputPoints.xyz";
 	}
 	else {
 		inPointsName = pointsName;
