@@ -34,6 +34,7 @@ Currently we have only tested our code on 64-bit windows systems and Visual Stud
 - Eigen3
 - Boost
 - Libigl
+- NVIDIA CUDA Toolkit
 
 ### Please using vcpkg to install dependent libraries!!!
 
@@ -49,27 +50,15 @@ Currently we have only tested our code on 64-bit windows systems and Visual Stud
 
 ### MSVC on Windows
 
-```
-Download this project: CWF
-```
+Open up the project in Visual Studio Code, open the Developer Command Prompt.
 
-Open Cmake-GUI
-
-```
-Where is the source code: CWF
-
-Where to build the binaries: CFW/build
-```
-
-note: check the location of dependencies and install. It is recommended to use vcpkg to add dependencies.
-
-Configure->Generate->Open Project
-
-Then, build the project:
-
-ALL_BUILD -> Build
-Turn Debug to Release -> ALL_BUILD -> Build
-
+- mkdir build
+- cd build
+- msbuild INSTALL.vcxproj
+- cd MAIN
+- msbuild MAIN.vcxproj
+- cd Debug
+- MAIN.exe
 
 ## Test
 
@@ -85,24 +74,13 @@ We put the result of our operation in 'CWF\data\LBFGSOUT\DemoOutput', you can us
 
 Make sure you are using C++ 14, not C++ 17 or newer versions. 
 
-This code is not optimized for speed, but for clarity.
-
-The default number of Openmp parallel threads is 30, set according to an AMD Ryzen 5950x CPU, please set different number of threads according to the CPU you use to get the best running effect.
-
-
-
 ## Testing Platform
 
 - Windows 10
-- Visual Studio 2022 Professional
-- AMD Ryzen 5950X
+- Visual Studio 2022
+- 13th Gen Intel i9-13900HX CPU
+- NVIDIA GeForce RTX 4070 GPU
 - 64GB Memory
-
-Considering that most computers may not have this configuration, this commit does not support acceleration.
-
-In order to allow you to view the optimization process in more detail,
-we have only set the optimization stop at 50 iterations, you can manually stop the optimization, and view all iteration results in the data\LBFGSOUT folder.
-
 
 ## License
 CWF is under [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.en.html), so any downstream solution and products (including cloud services) that include CWF code inside it should be open-sourced to comply with the AGPL conditions. For learning purposes only and not for commercial use. If you want to use it for commercial purposes, please contact us first.
