@@ -437,7 +437,7 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 
 			int triangles_before_here = 0, id0, id1, id2;
 			double area;
-			std::vector<bool> ids_used(NUM_VERTICES, false);
+
 			for (int i = 0; i < num; i++)
 			{
 				int NUM_TRIANGLES_HERE = cells[i].size();
@@ -473,7 +473,7 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 					// compute area for this triangle
 					area = cross_prod.length_();
 					area_vec_host[triangles_before_here + j] = .5 * area;
-					// compute normal for this triangle
+					
 					cross_prod.normalized_();
 					normals_vec_host[3 * (j + triangles_before_here)] = cross_prod.x();
 					normals_vec_host[(3 * (j + triangles_before_here)) + 1] = cross_prod.y();
@@ -507,9 +507,8 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 			gi_vec = new double[5 * num];
 			for (int i = 0; i < 5 * num; i++)
 			{
-				gi_vec[i] = 0.0f;
+				gi_vec[i] = 0.0;
 			}
-
 
 			for (int j = 0; j < ((THREADS_PER_TRIANGLE * NUM_TRIANGLES) + (MAX_THREADS_PER_BATCH - 1)) / MAX_THREADS_PER_BATCH; j++)
 			{
@@ -533,7 +532,6 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 				}
 
 			}
-			
 			
 			omp_set_num_threads(MAX_THREADS_AVAILABLE);
 #pragma omp parallel for reduction(+:lossCVT) reduction(+:totalLoss)
