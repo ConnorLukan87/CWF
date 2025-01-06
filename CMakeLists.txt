@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.17)
 # set(CMAKE_TOOLCHAIN_FILE C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake)
-project(BGAL)
+project(BGAL LANGUAGES CXX CUDA)
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_BUILD_TYPE "Debug")
 
 # Default Build_type RELEASE
 set(CMAKE_BUILD_TYPE RELEASE)
 # CXX STANDARD
 set(CMAKE_CXX_STANDARD 17)
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 # Set Version
 set(VERSION 1.0)
 # Set lib output directory
@@ -42,6 +48,13 @@ else ()
     message("ERROR: this program requires CGAL and will not be compiled.")
 endif ()
 
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+
+set(CUDAToolkit_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6")
+find_package(CUDAToolkit REQUIRED)
+set(CMAKE_CUDA_ARCHITECTURES "60;70;75;80")
+
+
 if(WIN32 AND NOT MINGW)
   if(NOT DEFINED CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX "d")
@@ -60,6 +73,8 @@ add_subdirectory(src)
 #target_link_libraries(${PROJECT_NAME}  Algorithm BaseShape Draw Geodesic Integral Model Optimization PointCloudProcessing PQP Reconstruction Tessellation2D Tessellation3D ${Boost_LIBRARIES})
 add_subdirectory(MAIN)
 
+#set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /NODEFAULTLIB:LIBCMT")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /NODEFAULTLIB:LIBCMT")
 
 
 install(TARGETS Algorithm BaseShape Draw Geodesic Integral Model Optimization PointCloudProcessing PQP Reconstruction Tessellation2D Tessellation3D CVTLike
