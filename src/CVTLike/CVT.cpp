@@ -336,11 +336,11 @@ void _CVT3D::calculate_(int num_sites, char* modelNamee, char* pointsName)
 	std::vector<Eigen::Vector3d> Pts, Nors;
 
 	int count = 0;
-	double x, y, z, nx, ny, nz; // if xyz file has normal
-	while (inPoints >> x >> y >> z >> nx >> ny >> nz) {
+	double x, y, z;
+	while (inPoints >> x >> y >> z) {
 		Pts.push_back(Eigen::Vector3d(x, y, z));
 		Nors.push_back(
-			Eigen::Vector3d(nx, ny, nz)); // Nors here is useless, if do not have normal, just set it to (1,0,0)
+			Eigen::Vector3d(1,0,0));
 		++count;
 	}
 	inPoints.close();
